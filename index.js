@@ -28,7 +28,13 @@ app.post("/download", async (req, res) => {
     let downloadUrl = url;
     const driveMatch = url.match(/\/d\/(.*?)(\/|$)/);
     if (driveMatch) {
-      downloadUrl = `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+      const fileId = driveMatch[1];
+      // Usa a URL de download direto contornando o aviso do Drive
+      downloadUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
+    }
+    // Normaliza link do Dropbox
+    if (url.includes('dropbox.com')) {
+      downloadUrl = url.replace('www.dropbox.com', 'dl.dropboxcontent.com').replace('?dl=0', '?dl=1');
     }
 
     const response = await axios({ url: downloadUrl, method: "GET", responseType: "stream" });
