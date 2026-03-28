@@ -79,6 +79,7 @@ app.post("/transcribe", async (req, res) => {
     const transcript = await client.transcripts.transcribe({
       audio: fs.createReadStream(audioPath),
       language_code: "pt",
+      speech_model: "universal-2",
       punctuate: true,
       format_text: true,
     });
