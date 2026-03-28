@@ -38,7 +38,10 @@ app.post("/download", async (req, res) => {
     }
 
     const response = await axios({ url: downloadUrl, method: "GET", responseType: "stream" });
-    const filePath = path.join("/tmp", `video_${Date.now()}.mp4`);
+    // Detecta extensão pelo Content-Type ou usa mov como fallback
+    const contentType = response.headers['content-type'] || '';
+    const ext = contentType.includes('quicktime') ? 'mov' : contentType.includes('mp4') ? 'mp4' : 'mov';
+    const filePath = path.join("/tmp", `video_${Date.now()}.${ext}`);
     const writer = fs.createWriteStream(filePath);
     response.data.pipe(writer);
 
@@ -54,7 +57,7 @@ app.post("/extract-audio", (req, res) => {
   const { filePath } = req.body;
   if (!filePath) return res.status(400).json({ error: "filePath não informado." });
 
-  const audioPath = filePath.replace(".mp4", ".mp3");
+  const audioPath = filePath.replace(/\.(mp4|mov|avi|mkv)$/i, ".mp3");
 
   ffmpeg(filePath)
     .output(audioPath)
