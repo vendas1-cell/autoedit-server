@@ -148,7 +148,7 @@ app.post("/export", (req, res) => {
   const keptSegments = segments.filter(s => s.keep);
   if (keptSegments.length === 0) return res.status(400).json({ error: "Nenhum segmento selecionado." });
 
-  const outputPath = filePath.replace(".mp4", `_edited_${Date.now()}.mp4`);
+  const outputPath = path.join("/tmp", `edited_${Date.now()}.${format || 'mp4'}`);
   const listPath = `/tmp/segments_${Date.now()}.txt`;
 
   // Gera arquivo de lista de segmentos para FFmpeg
