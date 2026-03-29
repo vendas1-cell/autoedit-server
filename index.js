@@ -203,16 +203,26 @@ Responda SOMENTE com um JSON válido, sem texto adicional, sem markdown, sem bac
   }
 });
 
-// ─── Exportar + Upload Cloudinary ─────────────────────────────────────────────
-app.post("/export", async (req, res) => {
+// ─── Jobs em memória ──────────────────────────────────────────────────────────
+const jobs = {};
+
+// ─── Exportar (assíncrono) ────────────────────────────────────────────────────
+app.post("/export", (req, res) => {
   const { filePath, segments, format } = req.body;
   if (!filePath || !segments) return res.status(400).json({ error: "Dados incompletos." });
 
   const keptSegments = segments.filter(s => s.keep);
   if (keptSegments.length === 0) return res.status(400).json({ error: "Nenhum segmento selecionado." });
 
+  const jobId = `job_${Date.now()}`;
+  jobs[jobId] = { status: "processing", progress: 0 };
+
+  // Responde imediatamente com o jobId
+  res.json({ success: true, jobId });
+
+  // Processa em background
   const ext = format || "mp4";
-  const outputPath = path.join("/tmp", `edited_${Date.now()}.${ext}`);
+  const outputPath = path.join("/tmp", `edited_${jobId}.${ext}`);
 
   const filterParts = keptSegments.map((seg, i) =>
     `[0:v]trim=start=${seg.startMs / 1000}:end=${seg.endMs / 1000},setpts=PTS-STARTPTS[v${i}];` +
@@ -227,26 +237,29 @@ app.post("/export", async (req, res) => {
     .complexFilter(fullFilter)
     .outputOptions(["-map [outv]", "-map [outa]", "-c:v libx264", "-c:a aac", "-shortest"])
     .output(outputPath)
+    .on("progress", (p) => { jobs[jobId].progress = Math.round(p.percent || 0); })
     .on("end", async () => {
       try {
-        // Upload para Cloudinary
+        jobs[jobId].status = "uploading";
         const uploaded = await cloudinary.uploader.upload(outputPath, {
-          resource_type: "video",
-          folder: "autoedit",
-          use_filename: true,
-          unique_filename: true,
+          resource_type: "video", folder: "autoedit",
+          use_filename: true, unique_filename: true,
         });
-
-        // Limpar arquivo local
         fs.unlink(outputPath, () => {});
-
-        res.json({ success: true, downloadUrl: uploaded.secure_url, publicId: uploaded.public_id });
-      } catch (uploadErr) {
-        res.status(500).json({ error: "Erro no upload: " + uploadErr.message });
+        jobs[jobId] = { status: "done", downloadUrl: uploaded.secure_url };
+      } catch (err) {
+        jobs[jobId] = { status: "error", error: "Erro no upload: " + err.message };
       }
     })
-    .on("error", (err) => res.status(500).json({ error: err.message }))
+    .on("error", (err) => { jobs[jobId] = { status: "error", error: err.message }; })
     .run();
+});
+
+// ─── Consultar status do job ──────────────────────────────────────────────────
+app.get("/export-status/:jobId", (req, res) => {
+  const job = jobs[req.params.jobId];
+  if (!job) return res.status(404).json({ error: "Job não encontrado." });
+  res.json(job);
 });
 
 // ─── Gerar SRT ────────────────────────────────────────────────────────────────
